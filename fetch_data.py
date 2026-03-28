@@ -187,7 +187,7 @@ html = f"""
 </html>
 """
 
-with open("dashboard.html", "w") as f:
+with open("index.html", "w") as f:
     f.write(html)
 
 print("Dashboard written to dashboard.html")
