@@ -3,37 +3,113 @@ import json
 
 
 TICKERS = {
-    "S&P 500":     "^GSPC",
-    "Dow Jones":   "^DJI",
-    "Nasdaq":      "^IXIC",
-    "Crude Oil":   "CL=F",
-    "Natural Gas": "NG=F",
-    "Gold":        "GC=F",
-    "Copper":      "HG=F",
-    "Wheat":       "ZW=F",
-    "OJ Futures":  "OJ=F",
+    "S&P 500":           "^GSPC",
+    "Dow Jones":         "^DJI",
+    "Nasdaq":            "^IXIC",
+    "Crude Oil":         "CL=F",
+    "Natural Gas":       "NG=F",
+    "Gold":              "GC=F",
+    "Copper":            "HG=F",
+    "Aluminum":          "ALI=F",   
+    "Wheat":             "ZW=F",
+    "OJ Futures":        "OJ=F",
+    "Mosaic Co":         "MOS",
+    "Nutrien":           "NTR",
+    "2Y Treasury":       "^IRX",
+    "10Y Treasury":      "^TNX",
+    "30Y Treasury":      "^TYX"
 }
 
 data = {}
 
 for name, symbol in TICKERS.items():
     try:
-        hist = yf.Ticker(symbol).history(period="1mo")
+        hist_mo  = yf.Ticker(symbol).history(period="1mo")
+        hist_ytd = yf.Ticker(symbol).history(period="1y")
+        hist_5d  = yf.Ticker(symbol).history(period="5d", interval="1h")
+
+        first_ytd = hist_ytd["Close"].iloc[0]
+        first_5d  = hist_5d["Close"].iloc[0]
+
         data[name] = {
-            "price": round(hist["Close"].iloc[-1], 2),
-            "dates": hist.index.strftime("%Y-%m-%d").tolist(),
-            "closes": [round(x, 2) for x in hist["Close"].tolist()]
+            "price":      round(hist_mo["Close"].iloc[-1], 2),
+            "dates":      hist_mo.index.strftime("%Y-%m-%d").tolist(),
+            "closes":     [round(x, 2) for x in hist_mo["Close"].tolist()],
+            "ytd_dates":  hist_ytd.index.strftime("%Y-%m-%d").tolist(),
+            "ytd_pct":    [round((x - first_ytd) / first_ytd * 100, 2)
+                           for x in hist_ytd["Close"].tolist()],
+            "5d_dates":   hist_5d.index.strftime("%Y-%m-%d %H:%M").tolist(),
+            "5d_pct":     [round((x - first_5d) / first_5d * 100, 2)
+                           for x in hist_5d["Close"].tolist()],
         }
     except Exception as e:
         data[name] = None
         print(f"Failed to fetch {name}: {e}")
 
 
-
 rows = ""
 for name, d in data.items():
     if d:
         rows += f"<tr><td>{name}</td><td>${d['price']}</td></tr>\n"
+
+
+COLORS = [
+    "#00ff99", "#ff6b6b", "#ffd93d", "#6bcbff",
+    "#ff9f43", "#a29bfe", "#fd79a8", "#55efc4",
+    "#fdcb6e", "#e17055", "#74b9ff", "#00cec9",
+    "#fab1a0", "#81ecec", "#636e72"
+]
+
+ytd_traces = ""
+d5_traces = ""
+for i, (name, d) in enumerate(data.items()):
+    if d:
+        color = COLORS[i % len(COLORS)]
+        ytd_traces += f"""{{
+            x: {json.dumps(d['ytd_dates'])},
+            y: {json.dumps(d['ytd_pct'])},
+            type: "scatter",
+            name: "{name}",
+            line: {{color: "{color}"}}
+        }},"""
+        d5_traces += f"""{{
+            x: {json.dumps(d['5d_dates'])},
+            y: {json.dumps(d['5d_pct'])},
+            type: "scatter",
+            name: "{name}",
+            line: {{color: "{color}"}}
+        }},"""
+
+composite_charts = f"""
+<div id="ytd_composite" style="width:100%; height:500px; margin-bottom:40px;"></div>
+<script>
+    Plotly.newPlot("ytd_composite", [{ytd_traces}], {{
+        title: "1 Year Performance (% change)",
+        paper_bgcolor: "#1a1a2e",
+        plot_bgcolor: "#16213e",
+        font: {{color: "#ffffff"}},
+        yaxis: {{title: "% Change", zeroline: true,
+                 zerolinecolor: "#ffffff", zerolinewidth: 1}},
+        margin: {{t: 50, b: 50, l: 60, r: 20}}
+    }});
+</script>
+
+<div id="d5_composite" style="width:100%; height:500px; margin-bottom:40px;"></div>
+<script>
+    Plotly.newPlot("d5_composite", [{d5_traces}], {{
+        title: "5 Day Performance (% change)",
+        paper_bgcolor: "#1a1a2e",
+        plot_bgcolor: "#16213e",
+        font: {{color: "#ffffff"}},
+        yaxis: {{title: "% Change", zeroline: true,
+                 zerolinecolor: "#ffffff", zerolinewidth: 1}},
+        margin: {{t: 50, b: 50, l: 60, r: 20}}
+    }});
+</script>
+"""
+
+
+
 
 charts = ""
 for name, d in data.items():
@@ -95,11 +171,18 @@ html = f"""
 </head>
 <body>
     <h1>Market Dashboard</h1>
-    <table>
-        <tr><th>Asset</th><th>Price</th></tr>
-        {rows}
-    </table>
-    {charts}
+    <div style="display:flex; gap:40px; align-items:flex-start;">
+        <table>
+            <tr><th>Asset</th><th>Price</th></tr>
+            {rows}
+        </table>
+        <div style="flex:1;">
+            {composite_charts}
+        </div>
+    </div>
+    <div style="display:flex; flex-wrap:wrap;">
+        {charts}
+    </div>
 </body>
 </html>
 """
